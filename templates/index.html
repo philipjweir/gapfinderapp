@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GapFinder — Knowledge Gap Diagnostic</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary:   #1a56db;
+      --primary-d: #1341a8;
+      --high:      #dc2626;
+      --moderate:  #d97706;
+      --strong:    #16a34a;
+      --good:      #0284c7;
+      --bg:        #f8fafc;
+      --card:      #ffffff;
+      --border:    #e2e8f0;
+      --text:      #1e293b;
+      --muted:     #64748b;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    .gf-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1a56db 60%, #0ea5e9 100%);
+      color: #fff; padding: 2rem 0 2.5rem;
+    }
+    .gf-header h1 { font-size: 2.2rem; font-weight: 700; letter-spacing: -.5px; }
+    .gf-badge {
+      display: inline-block;
+      background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3);
+      border-radius: 20px; padding: 3px 12px; font-size: .75rem;
+      letter-spacing: .5px; text-transform: uppercase; margin-bottom: .6rem;
+    }
+
+    /* ── Upload ── */
+    .upload-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 2rem; box-shadow: 0 4px 24px rgba(0,0,0,.06);
+    }
+    .drop-zone {
+      border: 2px dashed var(--border); border-radius: 12px;
+      padding: 1.8rem 1rem; text-align: center; transition: all .2s; cursor: pointer; background: #f8fafc;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: var(--primary); background: #eff6ff; }
+    .drop-zone .icon { font-size: 2.2rem; margin-bottom: .4rem; }
+    .drop-zone label { display: block; font-weight: 600; color: var(--primary); cursor: pointer; }
+    .drop-zone small { color: var(--muted); font-size: .8rem; }
+    .file-chosen { margin-top: .5rem; font-size: .8rem; color: var(--strong); font-weight: 500; display:none; }
+
+    .btn-analyse {
+      background: var(--primary); color: #fff; border: none;
+      padding: .75rem 2.2rem; border-radius: 10px; font-weight: 600;
+      font-size: 1rem; transition: background .2s, transform .1s; width: 100%;
+    }
+    .btn-analyse:hover:not(:disabled) { background: var(--primary-d); transform: translateY(-1px); }
+    .btn-analyse:disabled { opacity: .55; cursor: not-allowed; }
+
+    /* ── Spinner ── */
+    #spinner-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(255,255,255,.7); backdrop-filter: blur(4px);
+      z-index: 9999; flex-direction: column; align-items: center; justify-content: center;
+    }
+    #spinner-overlay.active { display: flex; }
+    .spinner-ring {
+      width: 56px; height: 56px; border: 5px solid #e2e8f0;
+      border-top-color: var(--primary); border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #results-section { display: none; }
+
+    /* ── Tabs ── */
+    .gf-tabs {
+      display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.5rem;
+    }
+    .gf-tab {
+      padding: .6rem 1.4rem; font-size: .9rem; font-weight: 600;
+      cursor: pointer; color: var(--muted); border-bottom: 3px solid transparent;
+      margin-bottom: -2px; transition: all .15s; user-select: none;
+    }
+    .gf-tab:hover { color: var(--primary); }
+    .gf-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    /* ── Stat cards ── */
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.4rem 1.2rem; text-align: center;
+    }
+    .stat-card .stat-num { font-size: 2.2rem; font-weight: 700; color: var(--primary); }
+    .stat-card .stat-lbl { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+
+    /* ── Profile badges ── */
+    .profile-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 20px;
+      font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .badge-Concentrated { background: #dcfce7; color: #15803d; }
+    .badge-Moderate     { background: #fef9c3; color: #92400e; }
+    .badge-Broad        { background: #fee2e2; color: #991b1b; }
+    .badge-Pass         { background: #dbeafe; color: #1d4ed8; }
+
+    /* ── Candidate cards (educator view) ── */
+    .candidate-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 1rem; overflow: hidden; transition: box-shadow .2s;
+    }
+    .candidate-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.08); }
+    .cand-header {
+      display: flex; align-items: center; gap: 1rem;
+      padding: 1rem 1.2rem; cursor: pointer; user-select: none;
+    }
+    .cand-id    { font-weight: 700; font-size: 1rem; min-width: 110px; }
+    .cand-score { font-size: .85rem; color: var(--muted); }
+    .cand-gaps  { font-size: .85rem; margin-left: auto; color: var(--muted); }
+    .cand-arrow { color: var(--muted); transition: transform .2s; font-size: .9rem; }
+    .cand-arrow.open { transform: rotate(180deg); }
+    .cand-body  { display: none; padding: 0 1.2rem 1.2rem; }
+
+    /* ── Bar rows ── */
+    .gap-row { margin-bottom: .6rem; }
+    .gap-label { display: flex; justify-content: space-between; font-size: .82rem; margin-bottom: 3px; }
+    .bar-bg { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width .6s ease; }
+    .fill-high     { background: var(--high); }
+    .fill-moderate { background: var(--moderate); }
+    .fill-strong   { background: var(--strong); }
+    .fill-good     { background: var(--good); }
+
+    .severity-high     { color: var(--high);     font-weight: 600; }
+    .severity-moderate { color: var(--moderate); font-weight: 600; }
+    .level-strong      { color: var(--strong);   font-weight: 600; }
+    .level-good        { color: var(--good);      font-weight: 600; }
+
+    /* ── Top outcomes ── */
+    .top-outcome-bar { display: flex; align-items: center; gap: .8rem; margin-bottom: .5rem; font-size: .85rem; }
+    .top-outcome-name { flex: 1; }
+    .top-outcome-bg { width: 120px; height: 10px; background: #e2e8f0; border-radius: 5px; overflow: hidden; }
+    .top-outcome-fill { height: 100%; background: var(--primary); border-radius: 5px; }
+
+    /* ── Filter bar ── */
+    .filter-bar { display: flex; gap: .6rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+    .filter-btn {
+      border: 1px solid var(--border); background: #fff; color: var(--text);
+      padding: 5px 14px; border-radius: 20px; font-size: .82rem; cursor: pointer; transition: all .15s;
+    }
+    .filter-btn.active, .filter-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+    #search-input {
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 5px 14px; font-size: .82rem; outline: none; width: 180px;
+    }
+    #search-input:focus { border-color: var(--primary); }
+
+    /* ── Model pill ── */
+    .model-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: .75rem; padding: 4px 12px; border-radius: 20px; font-weight: 600;
+    }
+    .pill-qnn       { background: #dbeafe; color: #1d4ed8; }
+    .pill-threshold { background: #f3f4f6; color: #374151; }
+
+    /* ── Student Lookup ── */
+    .lookup-box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 2rem; max-width: 540px; margin: 0 auto;
+    }
+    .lookup-input-row { display: flex; gap: .6rem; }
+    .lookup-input-row input {
+      flex: 1; border: 2px solid var(--border); border-radius: 10px;
+      padding: .6rem 1rem; font-size: 1rem; outline: none; font-family: 'Inter', sans-serif;
+      transition: border-color .2s;
+    }
+    .lookup-input-row input:focus { border-color: var(--primary); }
+    .btn-lookup {
+      background: var(--primary); color: #fff; border: none;
+      padding: .6rem 1.4rem; border-radius: 10px; font-weight: 600; cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-lookup:hover { background: var(--primary-d); }
+
+    /* ── Individual profile card ── */
+    #profile-result { display: none; margin-top: 1.5rem; }
+
+    .profile-header {
+      background: linear-gradient(135deg, #1e3a8a, #1a56db);
+      color: #fff; border-radius: 12px 12px 0 0; padding: 1.4rem 1.6rem;
+      display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    }
+    .profile-header .ph-id   { font-size: 1.4rem; font-weight: 700; }
+    .profile-header .ph-meta { font-size: .85rem; opacity: .85; }
+
+    .profile-body { border: 1px solid var(--border); border-top: none; border-radius: 0 0 12px 12px; padding: 1.4rem; }
+
+    .section-title {
+      font-weight: 700; font-size: .8rem; text-transform: uppercase;
+      letter-spacing: .6px; margin-bottom: .8rem; padding-bottom: .4rem;
+      border-bottom: 2px solid;
+    }
+    .section-title.gaps      { color: var(--high);    border-color: #fca5a5; }
+    .section-title.strengths { color: var(--strong);  border-color: #86efac; }
+
+    .result-pass { background: #dcfce7; color: #15803d; padding: 3px 10px; border-radius: 20px; font-size: .75rem; font-weight: 700; }
+    .result-fail { background: #fee2e2; color: #991b1b; padding: 3px 10px; border-radius: 20px; font-size: .75rem; font-weight: 700; }
+
+    #lookup-not-found { display: none; }
+    #error-alert, #lookup-error { display: none; }
+
+    /* ── Download btn ── */
+    .btn-dl {
+      background: #fff; border: 1.5px solid var(--primary); color: var(--primary);
+      padding: .5rem 1.4rem; border-radius: 8px; font-weight: 600;
+      font-size: .9rem; cursor: pointer; transition: all .15s;
+    }
+    .btn-dl:hover { background: var(--primary); color: #fff; }
+
+    footer { color: var(--muted); font-size: .8rem; }
+
+    @media (max-width: 576px) {
+      .gf-header h1 { font-size: 1.6rem; }
+      .lookup-input-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header class="gf-header">
+  <div class="container">
+    <div class="gf-badge">AI Diagnostic Tool</div>
+    <h1>🎯 GapFinder</h1>
+    <p class="mb-0">Upload exam response data to generate individualised knowledge gap profiles for failing candidates.</p>
+  </div>
+</header>
+
+<!-- ── Spinner ─────────────────────────────────────────────────────────────── -->
+<div id="spinner-overlay">
+  <div class="spinner-ring mb-3"></div>
+  <p class="text-muted">Analysing responses…</p>
+</div>
+
+<div class="container py-4">
+
+  <!-- ── Upload section ──────────────────────────────────────────────────── -->
+  <div id="upload-section">
+    <div class="row justify-content-center">
+      <div class="col-lg-7">
+        <div class="upload-card">
+          <h5 class="fw-bold mb-1">Upload Exam Data</h5>
+          <p class="text-muted small mb-3">Both files must be <strong>.xlsx</strong> format — the same files used in the Colab pipeline.</p>
+
+          <div class="row g-3 mb-3">
+            <div class="col-12">
+              <label class="fw-semibold small mb-1 d-block">1 — Full Results File</label>
+              <div class="drop-zone" id="zone-resp" onclick="document.getElementById('file-responses').click()">
+                <div class="icon">📊</div>
+                <label>Click to select file</label>
+                <small>e.g. CIP-01-May-2026_Full Results with Anonymised Learners.xlsx</small>
+                <div class="file-chosen" id="resp-chosen"></div>
+              </div>
+              <input type="file" id="file-responses" accept=".xlsx,.xls" style="display:none">
+            </div>
+            <div class="col-12">
+              <label class="fw-semibold small mb-1 d-block">2 — Answer Key File</label>
+              <div class="drop-zone" id="zone-ans" onclick="document.getElementById('file-answers').click()">
+                <div class="icon">🗝️</div>
+                <label>Click to select file</label>
+                <small>e.g. CIP-01 May 2026 exam correct answers.xlsx</small>
+                <div class="file-chosen" id="ans-chosen"></div>
+              </div>
+              <input type="file" id="file-answers" accept=".xlsx,.xls" style="display:none">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="fw-semibold small mb-1 d-block">Model weights path <span class="text-muted fw-normal">(optional)</span></label>
+            <input type="text" id="model-path" class="form-control form-control-sm"
+                   placeholder="gapfinder_qnn_best.pt  (leave blank to use threshold method)">
+            <div class="form-text">Absolute or relative path to <code>gapfinder_qnn_best.pt</code>.</div>
+          </div>
+
+          <div id="error-alert" class="alert alert-danger small py-2 mb-3"></div>
+          <button class="btn-analyse" id="btn-analyse" onclick="runAnalysis()" disabled>Analyse Responses</button>
+        </div>
+      </div>
+    </div>
+  </div><!-- /upload-section -->
+
+  <!-- ── Results section ─────────────────────────────────────────────────── -->
+  <div id="results-section">
+
+    <!-- Top bar -->
+    <div class="d-flex align-items-center flex-wrap gap-2 mb-3">
+      <button class="btn btn-sm btn-outline-secondary" onclick="resetUI()">← Upload new data</button>
+      <button class="btn-dl" id="btn-download" onclick="downloadCSV()">⬇ Download CSV</button>
+      <span id="model-pill" class="model-pill"></span>
+    </div>
+
+    <!-- Summary stats -->
+    <div class="row g-3 mb-4" id="stat-row"></div>
+
+    <!-- Tabs -->
+    <div class="gf-tabs">
+      <div class="gf-tab active" id="tab-educator" onclick="switchTab('educator')">📋 Educator Dashboard</div>
+      <div class="gf-tab"        id="tab-student"  onclick="switchTab('student')">🔍 Student Lookup</div>
+    </div>
+
+    <!-- ── Educator tab ── -->
+    <div id="pane-educator">
+      <div class="row g-3 mb-4">
+        <div class="col-md-5">
+          <div class="upload-card p-3">
+            <h6 class="fw-bold mb-3">Most Common Knowledge Gaps</h6>
+            <div id="top-outcomes-list"></div>
+          </div>
+        </div>
+        <div class="col-md-7">
+          <div class="upload-card p-3">
+            <h6 class="fw-bold mb-3">Profile Distribution</h6>
+            <div id="profile-dist-display"></div>
+          </div>
+        </div>
+      </div>
+
+      <h6 class="fw-bold mb-2">Failing Candidate Profiles</h6>
+      <div class="filter-bar">
+        <button class="filter-btn active" onclick="filterProfiles('All', this)">All</button>
+        <button class="filter-btn" onclick="filterProfiles('Concentrated', this)">Concentrated</button>
+        <button class="filter-btn" onclick="filterProfiles('Moderate', this)">Moderate</button>
+        <button class="filter-btn" onclick="filterProfiles('Broad', this)">Broad</button>
+        <input id="search-input" type="text" placeholder="Search student ID…" oninput="searchProfiles(this.value)">
+      </div>
+      <div id="candidates-container"></div>
+    </div>
+
+    <!-- ── Student Lookup tab ── -->
+    <div id="pane-student" style="display:none">
+      <div class="lookup-box">
+        <h6 class="fw-bold mb-1">Look up your profile</h6>
+        <p class="text-muted small mb-3">Enter your student number to view your personal knowledge profile — including both your strengths and your areas for improvement.</p>
+
+        <div class="lookup-input-row mb-2">
+          <input type="text" id="student-id-input"
+                 placeholder="e.g. 132"
+                 onkeydown="if(event.key==='Enter') lookupStudent()">
+          <button class="btn-lookup" onclick="lookupStudent()">View My Profile</button>
+        </div>
+
+        <div id="lookup-error" class="alert alert-danger small py-2 mt-2"></div>
+        <div id="lookup-not-found" class="alert alert-warning small py-2 mt-2">
+          No record found for that student number. Please check and try again.
+        </div>
+      </div>
+
+      <!-- Individual profile result -->
+      <div id="profile-result" class="mt-4">
+        <div class="profile-header" id="ph-header"></div>
+        <div class="profile-body">
+
+          <!-- Pass message -->
+          <div id="pass-message" class="alert alert-success small py-2 mb-3" style="display:none"></div>
+
+          <!-- Broad warning -->
+          <div id="broad-warning" class="alert alert-danger small py-2 mb-3" style="display:none">
+            ⚠️ Your results show gaps across many learning outcomes. A structured restudy programme covering the full syllabus is recommended before your next sitting.
+          </div>
+
+          <div class="row g-3">
+            <!-- Gaps / Focus areas -->
+            <div class="col-md-6" id="gaps-col">
+              <div class="section-title gaps">📌 Focus Areas (Knowledge Gaps)</div>
+              <div id="student-gaps-list"></div>
+              <p id="no-gaps-msg" class="text-muted small" style="display:none">No knowledge gaps identified — well done!</p>
+            </div>
+            <!-- Strengths -->
+            <div class="col-md-6" id="strengths-col">
+              <div class="section-title strengths">✅ Demonstrated Strengths</div>
+              <div id="student-strengths-list"></div>
+              <p id="no-strengths-msg" class="text-muted small" style="display:none">No mastered outcomes identified.</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div><!-- /pane-student -->
+
+  </div><!-- /results-section -->
+</div><!-- /container -->
+
+<footer class="text-center py-4">
+  GapFinder &nbsp;·&nbsp; Philip Weir &nbsp;·&nbsp; National College of Ireland &nbsp;·&nbsp; 2025/2026
+</footer>
+
+<script>
+// ── Global state ──────────────────────────────────────────────────────────────
+let gResults = null;
+
+// ── File pickers ──────────────────────────────────────────────────────────────
+function setupFilePicker(inputId, chosenId, zoneId) {
+  const inp  = document.getElementById(inputId);
+  const info = document.getElementById(chosenId);
+  const zone = document.getElementById(zoneId);
+  inp.addEventListener('change', () => {
+    if (inp.files.length) { info.textContent = '✓ ' + inp.files[0].name; info.style.display = 'block'; zone.style.borderColor = 'var(--strong)'; }
+    checkReady();
+  });
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) {
+      const dt = new DataTransfer(); dt.items.add(e.dataTransfer.files[0]);
+      inp.files = dt.files;
+      info.textContent = '✓ ' + e.dataTransfer.files[0].name; info.style.display = 'block';
+      zone.style.borderColor = 'var(--strong)';
+    }
+    checkReady();
+  });
+}
+setupFilePicker('file-responses', 'resp-chosen', 'zone-resp');
+setupFilePicker('file-answers',   'ans-chosen',  'zone-ans');
+function checkReady() {
+  document.getElementById('btn-analyse').disabled =
+    !(document.getElementById('file-responses').files.length &&
+      document.getElementById('file-answers').files.length);
+}
+
+// ── Run analysis ──────────────────────────────────────────────────────────────
+async function runAnalysis() {
+  hideError(); document.getElementById('spinner-overlay').classList.add('active');
+  const fd = new FormData();
+  fd.append('responses',  document.getElementById('file-responses').files[0]);
+  fd.append('answers',    document.getElementById('file-answers').files[0]);
+  fd.append('model_path', document.getElementById('model-path').value.trim());
+  try {
+    const res  = await fetch('/api/analyse', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) { showError(data.error); return; }
+    gResults = data;
+    renderResults(data);
+    document.getElementById('upload-section').style.display  = 'none';
+    document.getElementById('results-section').style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } catch (e) {
+    showError('Network error: ' + e.message);
+  } finally {
+    document.getElementById('spinner-overlay').classList.remove('active');
+  }
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.getElementById('tab-educator').classList.toggle('active', name === 'educator');
+  document.getElementById('tab-student').classList.toggle('active',  name === 'student');
+  document.getElementById('pane-educator').style.display = name === 'educator' ? '' : 'none';
+  document.getElementById('pane-student').style.display  = name === 'student'  ? '' : 'none';
+}
+
+// ── Render full results ───────────────────────────────────────────────────────
+function renderResults(data) {
+  // Model pill
+  const pill = document.getElementById('model-pill');
+  pill.className = 'model-pill ' + (data.model_used === 'qnn' ? 'pill-qnn' : 'pill-threshold');
+  pill.innerHTML = data.model_used === 'qnn' ? '🧠 QNN model' : '📐 Threshold method';
+
+  // Stats
+  const stats = [
+    { num: data.total_candidates, lbl: 'Total Candidates' },
+    { num: data.failing_count,    lbl: 'Failing' },
+    { num: data.passing_count,    lbl: 'Passing' },
+    { num: data.n_outcomes,       lbl: 'Learning Outcomes' },
+  ];
+  document.getElementById('stat-row').innerHTML = stats.map(s => `
+    <div class="col-6 col-md-3">
+      <div class="stat-card"><div class="stat-num">${s.num}</div><div class="stat-lbl">${s.lbl}</div></div>
+    </div>`).join('');
+
+  // Top weak outcomes
+  const maxC = data.top_weak_outcomes[0]?.count || 1;
+  document.getElementById('top-outcomes-list').innerHTML =
+    data.top_weak_outcomes.map(o => `
+      <div class="top-outcome-bar">
+        <div class="top-outcome-name">${o.outcome}</div>
+        <div class="top-outcome-bg"><div class="top-outcome-fill" style="width:${Math.round(o.count/maxC*100)}%"></div></div>
+        <div style="min-width:28px;text-align:right;font-size:.8rem;color:var(--muted)">${o.count}</div>
+      </div>`).join('');
+
+  // Profile dist
+  const dist = data.profile_distribution, total = data.failing_count || 1;
+  const types = [{key:'Concentrated',color:'#16a34a'},{key:'Moderate',color:'#d97706'},{key:'Broad',color:'#dc2626'}];
+  document.getElementById('profile-dist-display').innerHTML = types.map(t => `
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <div style="width:120px;font-size:.85rem;font-weight:600">${t.key}</div>
+      <div style="flex:1;height:20px;background:#e2e8f0;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${Math.round((dist[t.key]||0)/total*100)}%;background:${t.color};border-radius:4px;transition:width .6s"></div>
+      </div>
+      <div style="min-width:54px;font-size:.85rem;color:var(--muted)">${dist[t.key]||0} (${Math.round((dist[t.key]||0)/total*100)}%)</div>
+    </div>`).join('');
+
+  // Candidate cards
+  renderCandidateCards(data.failing_candidates);
+}
+
+function renderCandidateCards(candidates) {
+  const container = document.getElementById('candidates-container');
+  if (!candidates.length) { container.innerHTML = '<p class="text-muted">No failing candidates found.</p>'; return; }
+  container.innerHTML = candidates.map((c, idx) => {
+    const topGaps = c.gaps.slice(0, 5);
+    const gapBars = topGaps.map(g => `
+      <div class="gap-row">
+        <div class="gap-label">
+          <span>${g.outcome}</span>
+          <span class="severity-${g.severity}">${g.mastery_prob}% <small>${g.severity}</small></span>
+        </div>
+        <div class="bar-bg"><div class="bar-fill fill-${g.severity}" style="width:${Math.min(g.mastery_prob*2,100)}%"></div></div>
+      </div>`).join('');
+    const allRows = c.gaps.map((g,ri) => `<tr>
+      <td class="text-muted small">${ri+1}</td>
+      <td class="small">${g.outcome}</td>
+      <td class="small severity-${g.severity} fw-bold">${g.mastery_prob}%</td>
+      <td class="small severity-${g.severity}">${g.severity}</td></tr>`).join('');
+    return `
+    <div class="candidate-card" data-profile="${c.profile_type}" data-id="${c.student_id.toLowerCase()}">
+      <div class="cand-header" onclick="toggleCard(${idx})">
+        <div class="cand-id">Student ${c.student_id}</div>
+        <span class="profile-badge badge-${c.profile_type}">${c.profile_type}</span>
+        <div class="cand-score">Score: ${c.overall_score}</div>
+        <div class="cand-gaps">${c.n_gaps} gaps</div>
+        <div class="cand-arrow" id="arrow-${idx}">▼</div>
+      </div>
+      <div class="cand-body" id="body-${idx}">
+        <p class="small text-muted mb-2">Top ${topGaps.length} knowledge gaps by priority:</p>
+        ${gapBars}
+        ${c.gaps.length > 5 ? `<details class="mt-2"><summary class="small text-primary" style="cursor:pointer">Show all ${c.gaps.length} gaps</summary>
+          <table class="table table-sm mt-2"><thead><tr><th>#</th><th>Outcome</th><th>Mastery</th><th>Severity</th></tr></thead>
+          <tbody>${allRows}</tbody></table></details>` : ''}
+        ${c.profile_type === 'Broad' ? `<div class="alert alert-danger small py-2 mt-2 mb-0">⚠️ Broad failure pattern — a comprehensive restudy programme is recommended.</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCard(idx) {
+  const body  = document.getElementById('body-'  + idx);
+  const arrow = document.getElementById('arrow-' + idx);
+  const open  = body.style.display === 'block';
+  body.style.display = open ? 'none' : 'block';
+  arrow.classList.toggle('open', !open);
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+let activeFilter = 'All';
+function filterProfiles(type, btn) {
+  activeFilter = type;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active'); applyFilters();
+}
+function searchProfiles(q) { applyFilters(q); }
+function applyFilters(query) {
+  const q = (query ?? document.getElementById('search-input').value).toLowerCase();
+  document.querySelectorAll('.candidate-card').forEach(card => {
+    const ok = (activeFilter === 'All' || card.dataset.profile === activeFilter) &&
+               (!q || card.dataset.id.includes(q));
+    card.style.display = ok ? '' : 'none';
+  });
+}
+
+// ── Student Lookup ─────────────────────────────────────────────────────────────
+function lookupStudent() {
+  const raw = document.getElementById('student-id-input').value.trim();
+  document.getElementById('lookup-not-found').style.display = 'none';
+  document.getElementById('lookup-error').style.display     = 'none';
+  document.getElementById('profile-result').style.display   = 'none';
+
+  if (!raw) {
+    document.getElementById('lookup-error').textContent = 'Please enter a student number.';
+    document.getElementById('lookup-error').style.display = 'block';
+    return;
+  }
+  if (!gResults) {
+    document.getElementById('lookup-error').textContent = 'No data loaded. Please upload files first.';
+    document.getElementById('lookup-error').style.display = 'block';
+    return;
+  }
+
+  // Search all_candidates (case-insensitive, trim)
+  const query  = raw.toLowerCase().trim();
+  const all    = gResults.all_candidates || [];
+  const cand   = all.find(c => c.student_id.toLowerCase().trim() === query ||
+                                c.student_id.toLowerCase().trim().includes(query));
+
+  if (!cand) { document.getElementById('lookup-not-found').style.display = 'block'; return; }
+
+  renderStudentProfile(cand);
+}
+
+function renderStudentProfile(c) {
+  // Header
+  const resultEl  = c.is_failing
+    ? `<span class="result-fail">FAIL</span>`
+    : `<span class="result-pass">PASS</span>`;
+  const badgeEl   = c.is_failing
+    ? `<span class="profile-badge badge-${c.profile_type}">${c.profile_type}</span>`
+    : `<span class="profile-badge badge-Pass">Passing</span>`;
+
+  document.getElementById('ph-header').innerHTML = `
+    <div>
+      <div class="ph-id">Student ${c.student_id}</div>
+      <div class="ph-meta">Score: ${c.overall_score} &nbsp;|&nbsp; ${c.overall_result}</div>
+    </div>
+    <div class="ms-auto d-flex gap-2 align-items-center">
+      ${resultEl} ${badgeEl}
+    </div>`;
+
+  // Pass / broad messages
+  const passMsg  = document.getElementById('pass-message');
+  const broadMsg = document.getElementById('broad-warning');
+  passMsg.style.display  = 'none';
+  broadMsg.style.display = 'none';
+
+  if (!c.is_failing) {
+    passMsg.textContent   = `🎉 You passed this examination. The profile below shows areas where continued study would further strengthen your knowledge.`;
+    passMsg.style.display = 'block';
+  } else if (c.profile_type === 'Broad') {
+    broadMsg.style.display = 'block';
+  }
+
+  // Gaps
+  const gapsList   = document.getElementById('student-gaps-list');
+  const noGapsMsg  = document.getElementById('no-gaps-msg');
+  if (c.gaps.length === 0) {
+    gapsList.innerHTML = ''; noGapsMsg.style.display = 'block';
+  } else {
+    noGapsMsg.style.display = 'none';
+    gapsList.innerHTML = c.gaps.map(g => `
+      <div class="gap-row">
+        <div class="gap-label">
+          <span>${g.outcome}</span>
+          <span class="severity-${g.severity}">${g.mastery_prob}%</span>
+        </div>
+        <div class="bar-bg">
+          <div class="bar-fill fill-${g.severity}" style="width:${Math.min(g.mastery_prob * 2, 100)}%"></div>
+        </div>
+        <div style="font-size:.75rem;color:var(--muted);text-align:right;margin-top:2px">${g.severity === 'high' ? '⚠️ High priority' : 'Moderate priority'}</div>
+      </div>`).join('');
+  }
+
+  // Strengths
+  const strList    = document.getElementById('student-strengths-list');
+  const noStrMsg   = document.getElementById('no-strengths-msg');
+  if ((c.strengths || []).length === 0) {
+    strList.innerHTML = ''; noStrMsg.style.display = 'block';
+  } else {
+    noStrMsg.style.display = 'none';
+    strList.innerHTML = (c.strengths || []).map(s => `
+      <div class="gap-row">
+        <div class="gap-label">
+          <span>${s.outcome}</span>
+          <span class="level-${s.level}">${s.mastery_prob}%</span>
+        </div>
+        <div class="bar-bg">
+          <div class="bar-fill fill-${s.level}" style="width:${s.mastery_prob}%"></div>
+        </div>
+      </div>`).join('');
+  }
+
+  document.getElementById('profile-result').style.display = 'block';
+  document.getElementById('profile-result').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Download CSV ──────────────────────────────────────────────────────────────
+async function downloadCSV() {
+  if (!gResults) return;
+  const res  = await fetch('/api/download', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ failing_candidates: gResults.failing_candidates }),
+  });
+  const blob = await res.blob();
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'gapfinder_profiles.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function resetUI() {
+  document.getElementById('upload-section').style.display  = '';
+  document.getElementById('results-section').style.display = 'none';
+  document.getElementById('profile-result').style.display  = 'none';
+  document.getElementById('student-id-input').value = '';
+  gResults = null;
+}
+function showError(msg) {
+  const el = document.getElementById('error-alert'); el.textContent = msg; el.style.display = 'block';
+}
+function hideError() {
+  document.getElementById('error-alert').style.display = 'none';
+}
+</script>
+</body>
+</html>

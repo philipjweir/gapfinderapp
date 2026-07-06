@@ -1,0 +1,19 @@
+# Uploaded exam data (never commit student data)
+uploads/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Model weights (too large for GitHub)
+*.pt
+*.pth
+
+# macOS
+.DS_Store
+
+# Virtual environment
+venv/
+env/
